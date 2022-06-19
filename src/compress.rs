@@ -19,8 +19,8 @@ pub fn run(filename: &str) -> Result<(), Box<dyn Error>> {
     let hist = create_histogram(&content);
     let tree = build_tree(&mut init_leaves(hist));
     let tree = opt_result(tree, "Could not build a tree")?;
-    let lookup = make_lookup(tree);
-    let mut encoding = Vec::new();
+    let lookup = make_code_book(tree);
+    let mut encoding = encode_book(&lookup);
     let mut buffer = String::new();
     for byte in content {
         buffer = buffer + opt_result(lookup.get(&byte), "Couldn't find the encoding for a byte")?;
@@ -31,6 +31,15 @@ pub fn run(filename: &str) -> Result<(), Box<dyn Error>> {
             )?;
             encoding.push(byte);
         }
+    }
+    let leftover = buffer.len() as u8;
+    if leftover != 0 {
+        buffer = buffer + "1111111";
+        let byte = opt_result(
+            enc_buffer_to_bytes(&mut buffer),
+            "Could not convert buffer into a byte",
+        )?;
+        encoding.push(byte);
     }
 
     return Ok(());
@@ -114,29 +123,29 @@ fn opt_result<'a, T>(opt: Option<T>, err: &'a str) -> Result<T, &'a str> {
     }
 }
 
-pub fn make_lookup(huff_tree: Tree) -> IndexMap<u8, String> {
-    let mut lookup = IndexMap::new();
+pub fn make_code_book(huff_tree: Tree) -> IndexMap<u8, String> {
+    let mut book = IndexMap::new();
     // println!("{:?}", huff_tree);
     match huff_tree {
         Tree::Leaf(k, _) => {
-            lookup.insert(k, String::new());
+            book.insert(k, String::new());
         }
         Tree::Node(left, right, _) => {
-            let left = make_lookup(*left);
-            let right = make_lookup(*right);
+            let left = make_code_book(*left);
+            let right = make_code_book(*right);
             for (c, enc) in left.iter() {
                 let enc = format!("0{}", enc);
                 // println!("{}: \"{}\"", c, enc);
-                lookup.insert(*c, enc);
+                book.insert(*c, enc);
             }
             for (c, enc) in right.iter() {
                 let enc = format!("1{}", enc);
                 // println!("{}: \"{}\"", c, enc);
-                lookup.insert(*c, enc);
+                book.insert(*c, enc);
             }
         }
     }
-    lookup
+    book
 }
 
 pub fn enc_buffer_to_bytes(buffer: &mut String) -> Option<u8> {
@@ -154,6 +163,13 @@ pub fn enc_buffer_to_bytes(buffer: &mut String) -> Option<u8> {
     Some(byte)
 }
 
-pub fn encode_tree() {
-    unimplemented!()
+pub fn encode_book(book: &IndexMap<u8, String>) -> Vec<u8> {
+    let mut encoding = Vec::new();
+    for code in book.values() {
+        encoding.push(code.len() as u8);
+    }
+    for c in book.keys() {
+        encoding.push(*c);
+    }
+    encoding
 }

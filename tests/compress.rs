@@ -125,7 +125,7 @@ fn lookup_single() {
     let mut expected = IndexMap::new();
     expected.insert(1, "");
 
-    assert_eq!(make_lookup(input), expected)
+    assert_eq!(make_code_book(input), expected)
 }
 #[test]
 fn lookup_two() {
@@ -137,7 +137,7 @@ fn lookup_two() {
     expected.insert(2, "1");
     expected.insert(1, "0");
 
-    assert_eq!(make_lookup(input), expected)
+    assert_eq!(make_code_book(input), expected)
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn lookup_four() {
     expected.insert(1, "110");
     expected.insert(2, "111");
 
-    assert_eq!(make_lookup(input), expected)
+    assert_eq!(make_code_book(input), expected)
 }
 
 #[test]
