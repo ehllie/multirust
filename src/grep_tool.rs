@@ -1,6 +1,4 @@
-use std::env;
-use std::error::Error;
-use std::fs;
+use std::{env, error::Error, fs};
 
 pub struct Config<'a> {
     pub query: &'a String,
@@ -27,7 +25,6 @@ impl<'a> Config<'a> {
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    // --snip--
     let contents = fs::read_to_string(config.filename)?;
 
     if config.case_sensitive {
