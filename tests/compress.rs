@@ -173,7 +173,8 @@ fn book_canonical() {
     expected.insert(3, String::from("110"));
     expected.insert(5, String::from("111"));
     let res = code_lengths(input);
-    let res = canonical_book(res).unwrap();
+    let res = enc_vector(res).unwrap();
+    let res = canonical_book(&res);
 
     assert_eq!(res, expected)
 }
