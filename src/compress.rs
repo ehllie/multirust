@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use std::{error::Error, fs};
+use std::{cmp::Ordering, error::Error, fs};
 pub struct Config<'a> {
     pub filename: &'a String,
 }
@@ -14,36 +14,36 @@ impl<'a> Config<'a> {
     }
 }
 
-pub fn run(filename: &str) -> Result<(), Box<dyn Error>> {
-    let content = fs::read(filename)?;
-    let hist = create_histogram(&content);
-    let tree = build_tree(&mut init_leaves(hist));
-    let tree = opt_result(tree, "Could not build a tree")?;
-    let lookup = make_code_book(tree);
-    let mut encoding = encode_book(&lookup);
-    let mut buffer = String::new();
-    for byte in content {
-        buffer = buffer + opt_result(lookup.get(&byte), "Couldn't find the encoding for a byte")?;
-        if buffer.len() > 7 {
-            let byte = opt_result(
-                enc_buffer_to_bytes(&mut buffer),
-                "Could not convert buffer into a byte",
-            )?;
-            encoding.push(byte);
-        }
-    }
-    let leftover = buffer.len() as u8;
-    if leftover != 0 {
-        buffer = buffer + "1111111";
-        let byte = opt_result(
-            enc_buffer_to_bytes(&mut buffer),
-            "Could not convert buffer into a byte",
-        )?;
-        encoding.push(byte);
-    }
+// pub fn run(filename: &str) -> Result<(), Box<dyn Error>> {
+//     let content = fs::read(filename)?;
+//     let hist = histogram(&content);
+//     let tree = huff_tree(&mut leaves(hist));
+//     let tree = opt_result(tree, "Could not build a tree")?;
+//     let lookup = code_book(tree);
+//     let mut encoding = encode_book(&lookup);
+//     let mut buffer = String::new();
+//     for byte in content {
+//         buffer = buffer + opt_result(lookup.get(&byte), "Couldn't find the encoding for a byte")?;
+//         if buffer.len() > 7 {
+//             let byte = opt_result(
+//                 enc_buffer_to_bytes(&mut buffer),
+//                 "Could not convert buffer into a byte",
+//             )?;
+//             encoding.push(byte);
+//         }
+//     }
+//     let leftover = buffer.len() as u8;
+//     if leftover != 0 {
+//         buffer = buffer + "1111111";
+//         let byte = opt_result(
+//             enc_buffer_to_bytes(&mut buffer),
+//             "Could not convert buffer into a byte",
+//         )?;
+//         encoding.push(byte);
+//     }
 
-    return Ok(());
-}
+//     return Ok(());
+// }
 
 #[derive(Debug)]
 pub enum Tree {
@@ -74,7 +74,7 @@ impl PartialEq for Tree {
     }
 }
 
-pub fn create_histogram(content: &[u8]) -> IndexMap<u8, u32> {
+pub fn histogram(content: &[u8]) -> IndexMap<u8, u32> {
     let mut hist = IndexMap::new();
     for byte in content {
         let val;
@@ -87,7 +87,7 @@ pub fn create_histogram(content: &[u8]) -> IndexMap<u8, u32> {
     hist
 }
 
-pub fn init_leaves<'a>(histogram: IndexMap<u8, u32>) -> Vec<Tree> {
+pub fn leaves<'a>(histogram: IndexMap<u8, u32>) -> Vec<Tree> {
     let mut sorted = Vec::new();
     for (k, v) in histogram.sorted_by(|_, l, _, r| r.cmp(l)) {
         sorted.push(Tree::Leaf(k, v));
@@ -95,7 +95,7 @@ pub fn init_leaves<'a>(histogram: IndexMap<u8, u32>) -> Vec<Tree> {
     sorted
 }
 
-pub fn build_tree(leaves: &mut Vec<Tree>) -> Option<Tree> {
+pub fn huff_tree(leaves: &mut Vec<Tree>) -> Option<Tree> {
     let first = leaves.pop()?;
     let second;
     match leaves.pop() {
@@ -109,11 +109,11 @@ pub fn build_tree(leaves: &mut Vec<Tree>) -> Option<Tree> {
     for (i, node) in leaves.iter().enumerate() {
         if node.val() <= new_node.val() {
             leaves.insert(i, new_node);
-            return build_tree(leaves);
+            return huff_tree(leaves);
         };
     }
     leaves.push(new_node);
-    build_tree(leaves)
+    huff_tree(leaves)
 }
 
 fn opt_result<'a, T>(opt: Option<T>, err: &'a str) -> Result<T, &'a str> {
@@ -123,29 +123,52 @@ fn opt_result<'a, T>(opt: Option<T>, err: &'a str) -> Result<T, &'a str> {
     }
 }
 
-pub fn make_code_book(huff_tree: Tree) -> IndexMap<u8, String> {
+pub fn code_lengths(huff_tree: Tree) -> IndexMap<u8, usize> {
     let mut book = IndexMap::new();
     // println!("{:?}", huff_tree);
     match huff_tree {
         Tree::Leaf(k, _) => {
-            book.insert(k, String::new());
+            book.insert(k, 0);
         }
         Tree::Node(left, right, _) => {
-            let left = make_code_book(*left);
-            let right = make_code_book(*right);
-            for (c, enc) in left.iter() {
-                let enc = format!("0{}", enc);
-                // println!("{}: \"{}\"", c, enc);
-                book.insert(*c, enc);
+            let left = code_lengths(*left);
+            let right = code_lengths(*right);
+            for (byte, enc_len) in left.iter() {
+                book.insert(*byte, *enc_len + 1);
             }
-            for (c, enc) in right.iter() {
-                let enc = format!("1{}", enc);
-                // println!("{}: \"{}\"", c, enc);
-                book.insert(*c, enc);
+            for (byte, enc_len) in right.iter() {
+                book.insert(*byte, *enc_len + 1);
             }
         }
     }
     book
+}
+
+pub fn canonical_book(len_book: IndexMap<u8, usize>) -> Option<IndexMap<u8, String>> {
+    let longest = *len_book.last()?.1;
+    let mut encode_vector: Vec<Vec<u8>> = vec![Vec::new(); longest];
+    for (byte, enc_len) in len_book.iter() {
+        encode_vector[*enc_len - 1].push(*byte);
+    }
+    let mut code_book = IndexMap::new();
+    let mut global_byte: u8 = 0;
+    for (len, chars) in encode_vector.iter_mut().enumerate() {
+        match chars {
+            empty if empty.is_empty() => {}
+            non_empty => {
+                non_empty.sort();
+                for &mut c in non_empty {
+                    let b_string = format!("{:b}", global_byte);
+                    let pad = "0".repeat(0.max(len + 1 - b_string.len()));
+                    let padded = format!("{}{}", pad, b_string);
+                    code_book.insert(c, padded);
+                    global_byte += 1;
+                }
+                global_byte <<= 1
+            }
+        }
+    }
+    Some(code_book)
 }
 
 pub fn enc_buffer_to_bytes(buffer: &mut String) -> Option<u8> {
