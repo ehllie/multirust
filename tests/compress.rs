@@ -177,24 +177,3 @@ fn book_canonical() {
 
     assert_eq!(res, expected)
 }
-
-#[test]
-fn encode_too_short() {
-    let mut input = String::from("001");
-    assert_eq!(enc_buffer_to_bytes(&mut input), None);
-    assert_eq!(input, String::from("001"));
-}
-
-#[test]
-fn encode_valid() {
-    let mut input = String::from("00001010");
-    assert_eq!(enc_buffer_to_bytes(&mut input), Some(0b0000_1010));
-    assert_eq!(input, String::new());
-}
-
-#[test]
-fn encode_leftover() {
-    let mut input = String::from("0100101011");
-    assert_eq!(enc_buffer_to_bytes(&mut input), Some(0b0100_1010));
-    assert_eq!(input, String::from("11"));
-}

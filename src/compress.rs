@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use std::{cmp::Ordering, error::Error, fs};
+use std::{error::Error, fs};
 pub struct Config<'a> {
     pub filename: &'a String,
 }
@@ -14,36 +14,37 @@ impl<'a> Config<'a> {
     }
 }
 
-// pub fn run(filename: &str) -> Result<(), Box<dyn Error>> {
-//     let content = fs::read(filename)?;
-//     let hist = histogram(&content);
-//     let tree = huff_tree(&mut leaves(hist));
-//     let tree = opt_result(tree, "Could not build a tree")?;
-//     let lookup = code_book(tree);
-//     let mut encoding = encode_book(&lookup);
-//     let mut buffer = String::new();
-//     for byte in content {
-//         buffer = buffer + opt_result(lookup.get(&byte), "Couldn't find the encoding for a byte")?;
-//         if buffer.len() > 7 {
-//             let byte = opt_result(
-//                 enc_buffer_to_bytes(&mut buffer),
-//                 "Could not convert buffer into a byte",
-//             )?;
-//             encoding.push(byte);
-//         }
-//     }
-//     let leftover = buffer.len() as u8;
-//     if leftover != 0 {
-//         buffer = buffer + "1111111";
-//         let byte = opt_result(
-//             enc_buffer_to_bytes(&mut buffer),
-//             "Could not convert buffer into a byte",
-//         )?;
-//         encoding.push(byte);
-//     }
+pub fn run(in_file: &str, out_file: &str) -> Result<(), Box<dyn Error>> {
+    let content = fs::read(in_file)?;
+    let hist = histogram(&content);
+    let tree = huff_tree(&mut leaves(hist));
+    let tree = opt_result(tree, "Could not build a tree")?;
+    let encode_vector = opt_result(
+        enc_vector(code_lengths(tree)),
+        "Failed to create a canonical code book",
+    )?;
+    let book = canonical_book(&encode_vector);
+    let mut encoding = encode_book(&book);
+    let mut buffer = String::new();
+    for byte in content {
+        buffer = buffer + opt_result(book.get(&byte), "Couldn't find the encoding for a byte")?;
+        while buffer.len() > 7 {
+            let byte_string = buffer.drain(..8);
+            let byte = u8::from_str_radix(byte_string.as_str(), 2)?;
+            encoding.push(byte);
+        }
+    }
+    let leftover = buffer.len();
+    if leftover != 0 {
+        buffer = buffer + &"1".repeat(8 - leftover);
+        let byte = u8::from_str_radix(&buffer, 2)?;
+        encoding.push(byte);
+    }
+    let mut archive = vec![leftover as u8];
+    fs::write(out_file, archive)?;
 
-//     return Ok(());
-// }
+    return Ok(());
+}
 
 #[derive(Debug)]
 pub enum Tree {
@@ -144,20 +145,26 @@ pub fn code_lengths(huff_tree: Tree) -> IndexMap<u8, usize> {
     book
 }
 
-pub fn canonical_book(len_book: IndexMap<u8, usize>) -> Option<IndexMap<u8, String>> {
+pub fn enc_vector(len_book: IndexMap<u8, usize>) -> Option<Vec<Vec<u8>>> {
     let longest = *len_book.last()?.1;
     let mut encode_vector: Vec<Vec<u8>> = vec![Vec::new(); longest];
     for (byte, enc_len) in len_book.iter() {
         encode_vector[*enc_len - 1].push(*byte);
     }
+    for chars_of_len in encode_vector.iter_mut() {
+        chars_of_len.sort();
+    }
+    Some(encode_vector)
+}
+
+pub fn canonical_book(encode_vector: &Vec<Vec<u8>>) -> IndexMap<u8, String> {
     let mut code_book = IndexMap::new();
     let mut global_byte: u8 = 0;
-    for (len, chars) in encode_vector.iter_mut().enumerate() {
+    for (len, chars) in encode_vector.iter().enumerate() {
         match chars {
             empty if empty.is_empty() => {}
             non_empty => {
-                non_empty.sort();
-                for &mut c in non_empty {
+                for c in non_empty {
                     let b_string = format!("{:b}", global_byte);
                     let pad = "0".repeat(0.max(len + 1 - b_string.len()));
                     let padded = format!("{}{}", pad, b_string);
@@ -168,22 +175,7 @@ pub fn canonical_book(len_book: IndexMap<u8, usize>) -> Option<IndexMap<u8, Stri
             }
         }
     }
-    Some(code_book)
-}
-
-pub fn enc_buffer_to_bytes(buffer: &mut String) -> Option<u8> {
-    if buffer.len() < 8 {
-        return None;
-    };
-    let mut byte = 0;
-    for bit in buffer.drain(..8) {
-        byte = byte << 1;
-        if bit == '1' {
-            byte += 1;
-        }
-    }
-
-    Some(byte)
+    code_book
 }
 
 pub fn encode_book(book: &IndexMap<u8, String>) -> Vec<u8> {
