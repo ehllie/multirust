@@ -164,7 +164,7 @@ pub fn canonical_book(encode_vector: &Vec<Vec<u8>>) -> IndexMap<u8, String> {
         match chars {
             empty if empty.is_empty() => {}
             non_empty => {
-                for c in non_empty {
+                for &c in non_empty {
                     let b_string = format!("{:b}", global_byte);
                     let pad = "0".repeat(0.max(len + 1 - b_string.len()));
                     let padded = format!("{}{}", pad, b_string);
