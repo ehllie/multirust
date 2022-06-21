@@ -14,17 +14,26 @@ impl<'a> Config<'a> {
     }
 }
 
-pub fn run(in_file: &str, out_file: &str) -> Result<(), Box<dyn Error>> {
+pub fn compress(in_file: &str, out_file: &str) -> Result<(), Box<dyn Error>> {
     let content = fs::read(in_file)?;
     let hist = histogram(&content);
     let tree = huff_tree(&mut leaves(hist));
     let tree = opt_result(tree, "Could not build a tree")?;
+    let len_book = code_lengths(tree);
     let encode_vector = opt_result(
-        enc_vector(code_lengths(tree)),
+        enc_vector(&len_book),
         "Failed to create a canonical code book",
     )?;
-    let book = canonical_book(&encode_vector);
-    let mut encoding = encode_book(&book);
+    let book = canonical_book(encode_vector);
+    let mut encoding;
+    let dumped: bool;
+    if book.len() > (u8::MAX as usize / 2) {
+        encoding = dump_lenghts(len_book);
+        dumped = true;
+    } else {
+        encoding = encode_book(&book);
+        dumped = false;
+    }
     let mut buffer = String::new();
     for byte in content {
         buffer = buffer + opt_result(book.get(&byte), "Couldn't find the encoding for a byte")?;
@@ -145,7 +154,7 @@ pub fn code_lengths(huff_tree: Tree) -> IndexMap<u8, usize> {
     book
 }
 
-pub fn enc_vector(len_book: IndexMap<u8, usize>) -> Option<Vec<Vec<u8>>> {
+pub fn enc_vector(len_book: &IndexMap<u8, usize>) -> Option<Vec<Vec<u8>>> {
     let longest = *len_book.last()?.1;
     let mut encode_vector: Vec<Vec<u8>> = vec![Vec::new(); longest];
     for (byte, enc_len) in len_book.iter() {
@@ -157,7 +166,7 @@ pub fn enc_vector(len_book: IndexMap<u8, usize>) -> Option<Vec<Vec<u8>>> {
     Some(encode_vector)
 }
 
-pub fn canonical_book(encode_vector: &Vec<Vec<u8>>) -> IndexMap<u8, String> {
+pub fn canonical_book(encode_vector: Vec<Vec<u8>>) -> IndexMap<u8, String> {
     let mut code_book = IndexMap::new();
     let mut global_byte: u8 = 0;
     for (len, chars) in encode_vector.iter().enumerate() {
@@ -176,6 +185,15 @@ pub fn canonical_book(encode_vector: &Vec<Vec<u8>>) -> IndexMap<u8, String> {
         }
     }
     code_book
+}
+
+pub fn dump_lenghts(len_book: IndexMap<u8, usize>) -> Vec<u8> {
+    let mut encoding = Vec::new();
+    for c in 0..=u8::MAX {
+        let enc_len = *len_book.get(&c).unwrap_or_else(|| &0);
+        encoding.push(enc_len as u8);
+    }
+    encoding
 }
 
 pub fn encode_book(book: &IndexMap<u8, String>) -> Vec<u8> {

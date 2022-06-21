@@ -173,8 +173,27 @@ fn book_canonical() {
     expected.insert(3, String::from("110"));
     expected.insert(5, String::from("111"));
     let res = code_lengths(input);
-    let res = enc_vector(res).unwrap();
-    let res = canonical_book(&res);
+    let res = enc_vector(&res).unwrap();
+    let res = canonical_book(res);
 
     assert_eq!(res, expected)
+}
+
+#[test]
+fn book_encode() {
+    let l1 = Tree::Leaf(4, 6);
+    let l2 = Tree::Leaf(2, 7);
+    let l3 = Tree::Leaf(3, 4);
+    let l4 = Tree::Leaf(1, 8);
+    let l5 = Tree::Leaf(5, 5);
+    let n1 = Tree::Node(Box::new(l3), Box::new(l5), 9);
+    let input = Tree::Node(Box::new(l1), Box::new(l2), 13);
+    let n1 = Tree::Node(Box::new(l4), Box::new(n1), 9);
+    let input = Tree::Node(Box::new(input), Box::new(n1), 13);
+    let input = code_lengths(input);
+    let input = enc_vector(&input).unwrap();
+    let input = canonical_book(input);
+    let expected = vec![0, 3, 2, 1, 2, 4, 3, 5];
+
+    assert_eq!(encode_book(&input), expected)
 }
