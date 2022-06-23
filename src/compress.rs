@@ -28,10 +28,10 @@ pub fn compress(in_file: &str, out_file: &str) -> Result<(), Box<dyn Error>> {
     let mut encoding;
     let dumped: bool;
     if book.len() > (u8::MAX as usize / 2) {
-        encoding = dump_lenghts(len_book);
+        encoding = dump_all(len_book);
         dumped = true;
     } else {
-        encoding = encode_book(&book);
+        encoding = dump_used(&book);
         dumped = false;
     }
     let mut buffer = String::new();
@@ -187,7 +187,7 @@ pub fn canonical_book(encode_vector: Vec<Vec<u8>>) -> IndexMap<u8, String> {
     code_book
 }
 
-pub fn dump_lenghts(len_book: IndexMap<u8, usize>) -> Vec<u8> {
+pub fn dump_all(len_book: IndexMap<u8, usize>) -> Vec<u8> {
     let mut encoding = Vec::new();
     for c in 0..=u8::MAX {
         let enc_len = *len_book.get(&c).unwrap_or_else(|| &0);
@@ -196,11 +196,20 @@ pub fn dump_lenghts(len_book: IndexMap<u8, usize>) -> Vec<u8> {
     encoding
 }
 
-pub fn encode_book(book: &IndexMap<u8, String>) -> Vec<u8> {
+pub fn dump_used(book: &IndexMap<u8, String>) -> Vec<u8> {
     let mut encoding = Vec::new();
+    let mut enc_i = 1;
+    let mut enc_n = 0;
     for code in book.values() {
-        encoding.push(code.len() as u8);
+        let curr_len = code.len();
+        while enc_i < curr_len {
+            encoding.push(enc_n);
+            enc_i += 1;
+            enc_n = 0;
+        }
+        enc_n += 1;
     }
+    encoding.push(enc_n);
     for c in book.keys() {
         encoding.push(*c);
     }
