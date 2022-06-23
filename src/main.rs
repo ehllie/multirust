@@ -1,5 +1,5 @@
 use enum_iterator::{all, Sequence};
-use multirust::grep_tool;
+use multirust::{compress, grep_tool};
 use std::{env, fmt::Debug, process};
 
 fn main() {
@@ -34,7 +34,15 @@ fn parse_tool(arg: &str) -> Result<Tool, ()> {
 }
 
 fn compress(args: &[String]) {
-    unimplemented!()
+    let config = compress::Config::new(&args).unwrap_or_else(|err| {
+        eprintln!("Error while parsing config: {}", err);
+        process::exit(1)
+    });
+
+    if let Err(e) = compress::compress(config) {
+        eprintln!("Application error: {}", e);
+        process::exit(1)
+    }
 }
 
 fn grep(args: &[String]) {

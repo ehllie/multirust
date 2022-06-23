@@ -14,8 +14,8 @@ impl<'a> Config<'a> {
     }
 }
 
-pub fn compress(filename: &str) -> Result<(), Box<dyn Error>> {
-    let content = fs::read(filename)?;
+pub fn compress(conf: Config) -> Result<(), Box<dyn Error>> {
+    let content = fs::read(conf.filename)?;
     let hist = histogram(&content);
     let tree = huff_tree(&mut leaves(hist));
     let tree = opt_result(tree, "Could not build a tree")?;
@@ -47,7 +47,7 @@ pub fn compress(filename: &str) -> Result<(), Box<dyn Error>> {
         code_lenghts: len_book,
     });
     header.append(&mut encoding);
-    fs::write(format!("{}.mhf", filename), header)?;
+    fs::write(format!("{}.mhf", conf.filename), header)?;
 
     return Ok(());
 }
@@ -173,7 +173,10 @@ pub fn code_lengths(huff_tree: Tree) -> IndexMap<u8, usize> {
 }
 
 pub fn enc_vector(len_book: &IndexMap<u8, usize>) -> Option<Vec<Vec<u8>>> {
-    let longest = *len_book.last()?.1;
+    let mut longest = 0;
+    for &len in len_book.values() {
+        longest = longest.max(len);
+    }
     let mut encode_vector: Vec<Vec<u8>> = vec![Vec::new(); longest];
     for (byte, enc_len) in len_book.iter() {
         encode_vector[*enc_len - 1].push(*byte);
@@ -186,7 +189,7 @@ pub fn enc_vector(len_book: &IndexMap<u8, usize>) -> Option<Vec<Vec<u8>>> {
 
 pub fn canonical_book(encode_vector: Vec<Vec<u8>>) -> IndexMap<u8, String> {
     let mut code_book = IndexMap::new();
-    let mut global_byte: u8 = 0;
+    let mut global_byte: u32 = 0;
     for (len, chars) in encode_vector.iter().enumerate() {
         match chars {
             empty if empty.is_empty() => {}
