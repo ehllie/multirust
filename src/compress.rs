@@ -14,8 +14,8 @@ impl<'a> Config<'a> {
     }
 }
 
-pub fn compress(in_file: &str, out_file: &str) -> Result<(), Box<dyn Error>> {
-    let content = fs::read(in_file)?;
+pub fn compress(filename: &str) -> Result<(), Box<dyn Error>> {
+    let content = fs::read(filename)?;
     let hist = histogram(&content);
     let tree = huff_tree(&mut leaves(hist));
     let tree = opt_result(tree, "Could not build a tree")?;
@@ -25,15 +25,7 @@ pub fn compress(in_file: &str, out_file: &str) -> Result<(), Box<dyn Error>> {
         "Failed to create a canonical code book",
     )?;
     let book = canonical_book(encode_vector);
-    let mut encoding;
-    let dumped: bool;
-    if book.len() > (u8::MAX as usize / 2) {
-        encoding = dump_all(len_book);
-        dumped = true;
-    } else {
-        encoding = dump_used(&book);
-        dumped = false;
-    }
+    let mut encoding = Vec::new();
     let mut buffer = String::new();
     for byte in content {
         buffer = buffer + opt_result(book.get(&byte), "Couldn't find the encoding for a byte")?;
@@ -49,10 +41,36 @@ pub fn compress(in_file: &str, out_file: &str) -> Result<(), Box<dyn Error>> {
         let byte = u8::from_str_radix(&buffer, 2)?;
         encoding.push(byte);
     }
-    let mut archive = vec![leftover as u8];
-    fs::write(out_file, archive)?;
+    let mut header = create_header(MetaData {
+        leftover: leftover as u8,
+        book: book,
+        code_lenghts: len_book,
+    });
+    header.append(&mut encoding);
+    fs::write(format!("{}.mhf", filename), header)?;
 
     return Ok(());
+}
+
+pub struct MetaData {
+    leftover: u8,
+    book: IndexMap<u8, String>,
+    code_lenghts: IndexMap<u8, usize>,
+}
+
+pub fn create_header(metadata: MetaData) -> Vec<u8> {
+    let top_3 = metadata.leftover << 5;
+    let mut header = Vec::new();
+    let l = metadata.book.len() as u8;
+    if l > (u8::MAX / 2) {
+        header.push(top_3 | 0b0001_0000);
+        header.append(&mut dump_all(metadata.code_lenghts));
+    } else {
+        header.push(top_3);
+        header.push(l);
+        header.append(&mut dump_used(metadata.book))
+    };
+    header
 }
 
 #[derive(Debug)]
@@ -196,7 +214,7 @@ pub fn dump_all(len_book: IndexMap<u8, usize>) -> Vec<u8> {
     encoding
 }
 
-pub fn dump_used(book: &IndexMap<u8, String>) -> Vec<u8> {
+pub fn dump_used(book: IndexMap<u8, String>) -> Vec<u8> {
     let mut encoding = Vec::new();
     let mut enc_i = 1;
     let mut enc_n = 0;

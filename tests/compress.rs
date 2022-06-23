@@ -195,5 +195,5 @@ fn book_encode() {
     let input = canonical_book(input);
     let expected = vec![0, 3, 2, 1, 2, 4, 3, 5];
 
-    assert_eq!(dump_used(&input), expected)
+    assert_eq!(dump_used(input), expected)
 }
